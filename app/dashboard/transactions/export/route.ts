@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-function escapeCsv(value: string | number) {
-  const text = String(value);
+function escapeCsv(value: string | number | null) {
+  const text = String(value ?? "");
   return `"${text.replace(/"/g, '""')}"`;
 }
 

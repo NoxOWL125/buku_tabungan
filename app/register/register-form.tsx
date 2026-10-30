@@ -3,9 +3,12 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { registerUser } from "@/app/actions/auth";
+import {
+  registerUser,
+  type RegisterState,
+} from "@/app/actions/auth";
 
-const initialState = {};
+const initialState: RegisterState = {};
 
 export default function RegisterForm() {
   const [state, formAction, isPending] = useActionState(

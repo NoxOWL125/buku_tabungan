@@ -10,6 +10,13 @@ import DeleteAllTransactionsButton from "./delete-all-transactions-button";
 import CharacterBanner from "./character-banner";
 import CharacterSelector from "./character-selector";
 
+export const instant = false;
+
+import {
+  Prisma,
+  TransactionType,
+} from "@/generated/prisma/client";
+
 function formatRupiah(amount: number) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -39,7 +46,6 @@ function buildPageUrl(
   return `/dashboard?${searchParams.toString()}`;
 }
 
-
 type DashboardSearchParams = {
   q?: string | string[];
   type?: string | string[];
@@ -55,147 +61,147 @@ type DashboardPageProps = {
 export default async function DashboardPage({
   searchParams,
 }: DashboardPageProps) {
-    const user = await getCurrentUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     redirect("/login");
   }
 
-    const params = await searchParams;
-    
-    const rawPage = Array.isArray(params.page)
+  const params = await searchParams;
+
+  const rawPage = Array.isArray(params.page)
     ? params.page[0]
     : params.page;
 
-    const requestedPage = Number(rawPage ?? "1");
+  const requestedPage = Number(rawPage ?? "1");
 
-    const page =
+  const page =
     Number.isSafeInteger(requestedPage) && requestedPage > 0
-        ? requestedPage
-        : 1;
+      ? requestedPage
+      : 1;
 
-    const pageSize = 10;
+  const pageSize = 10;
 
-    const q = (
+  const q = (
     Array.isArray(params.q) ? params.q[0] : params.q
-    )?.trim().slice(0, 100) ?? "";
+  )?.trim().slice(0, 100) ?? "";
 
-    const rawType = Array.isArray(params.type)
+  const rawType = Array.isArray(params.type)
     ? params.type[0]
     : params.type;
 
-    const type =
+  const type: TransactionType | "" =
     rawType === "INCOME" || rawType === "EXPENSE"
-        ? rawType
-        : "";
+      ? rawType
+      : "";
 
-    const rawFrom = Array.isArray(params.from)
+  const rawFrom = Array.isArray(params.from)
     ? params.from[0]
     : params.from;
 
-    const rawTo = Array.isArray(params.to)
+  const rawTo = Array.isArray(params.to)
     ? params.to[0]
     : params.to;
 
-    function isValidDateOnly(
-    value: string | undefined,
-    ): value is string {
+  function isValidDateOnly(
+    value: string | undefined
+  ): value is string {
     if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        return false;
+      return false;
     }
 
     const date = new Date(`${value}T00:00:00.000Z`);
 
     return (
-        !Number.isNaN(date.getTime()) &&
-        date.toISOString().slice(0, 10) === value
+      !Number.isNaN(date.getTime()) &&
+      date.toISOString().slice(0, 10) === value
     );
-    }
+  }
 
-    const from = isValidDateOnly(rawFrom) ? rawFrom : "";
-    const to = isValidDateOnly(rawTo) ? rawTo : "";
+  const from = isValidDateOnly(rawFrom) ? rawFrom : "";
+  const to = isValidDateOnly(rawTo) ? rawTo : "";
 
-    const dateFilter: { gte?: Date; lt?: Date } = {};
+  const dateFilter: {
+    gte?: Date;
+    lt?: Date;
+  } = {};
 
-    if (from) {
+  if (from) {
     dateFilter.gte = new Date(`${from}T00:00:00.000Z`);
-    }
+  }
 
-    if (to) {
+  if (to) {
     const endDate = new Date(`${to}T00:00:00.000Z`);
     endDate.setUTCDate(endDate.getUTCDate() + 1);
     dateFilter.lt = endDate;
-    }
+  }
 
-  const where = {
-  userId: user.id,
+  const where: Prisma.TransactionWhereInput = {
+    userId: user.id,
 
-  ...(type ? { type } : {}),
+    ...(type ? { type } : {}),
 
-  ...(q
-    ? {
-        OR: [
-          { category: { contains: q } },
-          { description: { contains: q } },
-        ],
-      }
-    : {}),
+    ...(q
+      ? {
+          OR: [
+            { category: { contains: q } },
+            { description: { contains: q } },
+          ],
+        }
+      : {}),
 
-  ...(Object.keys(dateFilter).length > 0
-    ? { transactionDate: dateFilter }
-    : {}),
-};
+    ...(Object.keys(dateFilter).length > 0
+      ? { transactionDate: dateFilter }
+      : {}),
+  };
 
+  const totalTransactions = await prisma.transaction.count({
+    where,
+  });
 
-const totalTransactions = await prisma.transaction.count({
-  where,
-});
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalTransactions / pageSize)
+  );
 
-const totalPages = Math.max(
-  1,
-  Math.ceil(totalTransactions / pageSize)
-);
+  const currentPage = Math.min(page, totalPages);
 
-const currentPage = Math.min(page, totalPages);
-
-const transactions = await prisma.transaction.findMany({
-  where,
-  orderBy: [
-    { transactionDate: "desc" },
-    { createdAt: "desc" },
-  ],
-  skip: (currentPage - 1) * pageSize,
-  take: pageSize,
-});
-
+  const transactions = await prisma.transaction.findMany({
+    where,
+    orderBy: [
+      { transactionDate: "desc" },
+      { createdAt: "desc" },
+    ],
+    skip: (currentPage - 1) * pageSize,
+    take: pageSize,
+  });
 
   const [incomeResult, expenseResult] = await Promise.all([
-  prisma.transaction.aggregate({
-    where: {
-      userId: user.id,
-      type: "INCOME",
-    },
-    _sum: {
-      amount: true,
-    },
-  }),
+    prisma.transaction.aggregate({
+      where: {
+        userId: user.id,
+        type: TransactionType.INCOME,
+      },
+      _sum: {
+        amount: true,
+      },
+    }),
 
-  prisma.transaction.aggregate({
-    where: {
-      userId: user.id,
-      type: "EXPENSE",
-    },
-    _sum: {
-      amount: true,
-    },
-  }),
-]);
+    prisma.transaction.aggregate({
+      where: {
+        userId: user.id,
+        type: TransactionType.EXPENSE,
+      },
+      _sum: {
+        amount: true,
+      },
+    }),
+  ]);
 
-const totalIncome = Number(incomeResult._sum.amount ?? 0);
-const totalExpense = Number(expenseResult._sum.amount ?? 0);
-const balance = totalIncome - totalExpense;
+  const totalIncome = Number(incomeResult._sum.amount ?? 0);
+  const totalExpense = Number(expenseResult._sum.amount ?? 0);
+  const balance = totalIncome - totalExpense;
 
-  
   return (
     <main className="min-h-screen overflow-hidden bg-[#070910] text-slate-100">
       {/* Background anime-inspired */}
@@ -206,45 +212,45 @@ const balance = totalIncome - totalExpense;
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
-        
+
         {/* Header */}
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
-            <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-red-500/40 bg-red-950/50 text-xl font-black text-red-400 shadow-lg shadow-red-950/30">
-                呪
-                </div>
-
-                <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-red-400">
-                    Cursed Finance
-                </p>
-
-                <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
-                    Buku Tabungan
-                    <span className="text-red-400"> Digital.</span>
-                </h1>
-                </div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-red-500/40 bg-red-950/50 text-xl font-black text-red-400 shadow-lg shadow-red-950/30">
+              呪
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-                <CharacterSelector />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-red-400">
+                Cursed Finance
+              </p>
 
-                <Link
-                href="/dashboard/rekap"
-                className="rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-200 transition hover:border-violet-300/60 hover:bg-violet-500/20"
-                >
-                Rekap Bulanan
-                </Link>
-
-                <form action={logoutUser}>
-                <button
-                    type="submit"
-                    className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300"
-                >
-                    Logout ↗
-                </button>
-                </form>
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+                Buku Tabungan
+                <span className="text-red-400"> Digital.</span>
+              </h1>
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <CharacterSelector />
+
+            <Link
+              href="/dashboard/rekap"
+              className="rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-200 transition hover:border-violet-300/60 hover:bg-violet-500/20"
+            >
+              Rekap Bulanan
+            </Link>
+
+            <form action={logoutUser}>
+              <button
+                type="submit"
+                className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300"
+              >
+                Logout ↗
+              </button>
+            </form>
+          </div>
         </header>
 
         {/* Character banner */}
@@ -466,12 +472,12 @@ const balance = totalIncome - totalExpense;
                         <td className="px-4 py-4">
                           <span
                             className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${
-                              transaction.type === "INCOME"
+                              transaction.type === TransactionType.INCOME
                                 ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
                                 : "border-rose-400/20 bg-rose-400/10 text-rose-300"
                             }`}
                           >
-                            {transaction.type === "INCOME" ? "↗ Masuk" : "↘ Keluar"}
+                            {transaction.type === TransactionType.INCOME ? "↗ Masuk" : "↘ Keluar"}
                           </span>
                         </td>
                         <td className="px-4 py-4 text-slate-300">
@@ -482,12 +488,12 @@ const balance = totalIncome - totalExpense;
                         </td>
                         <td
                           className={`whitespace-nowrap px-4 py-4 text-right font-semibold ${
-                            transaction.type === "INCOME"
+                            transaction.type === TransactionType.INCOME
                               ? "text-emerald-300"
                               : "text-rose-300"
                           }`}
                         >
-                          {transaction.type === "INCOME" ? "+" : "-"}
+                          {transaction.type === TransactionType.INCOME ? "+" : "-"}
                           {formatRupiah(Number(transaction.amount))}
                         </td>
                         <td className="px-4 py-4">

@@ -3,9 +3,12 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { loginUser } from "@/app/actions/auth";
+import {
+  loginUser,
+  type RegisterState,
+} from "@/app/actions/auth";
 
-const initialState = {};
+const initialState: RegisterState = {};
 
 export default function LoginForm() {
   const [state, formAction, isPending] = useActionState(
