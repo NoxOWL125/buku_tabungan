@@ -1,5 +1,9 @@
+
 const { app, BrowserWindow } = require("electron");
 const { spawn } = require("child_process");
+const path = require("path");
+
+app.setName("Buku Tabungan Digital");
 
 const isDev = !app.isPackaged;
 
@@ -10,9 +14,41 @@ const APP_URL = `http://${HOST}:${PORT}`;
 let mainWindow;
 let nextServer;
 
+function waitForNextServer(resolve, reject) {
+  const maxAttempts = 60;
+  let attempts = 0;
+
+  const checkServer = async () => {
+    attempts++;
+
+    try {
+      const response = await fetch(APP_URL);
+
+      if (response.ok || response.status < 500) {
+        resolve();
+        return;
+      }
+    } catch {
+      // Server belum siap.
+    }
+
+    if (attempts >= maxAttempts) {
+      reject(
+        new Error("Next.js tidak berhasil dijalankan dalam 60 detik.")
+      );
+      return;
+    }
+
+    setTimeout(checkServer, 1000);
+  };
+
+  checkServer();
+}
+
 function startNextServer() {
   return new Promise((resolve, reject) => {
-    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+    const npmCommand =
+      process.platform === "win32" ? "npm.cmd" : "npm";
 
     nextServer = spawn(
       npmCommand,
@@ -50,33 +86,68 @@ function startNextServer() {
   });
 }
 
-async function waitForNextServer(resolve, reject) {
-  const maxAttempts = 60;
-  let attempts = 0;
+async function startProductionServer() {
+  // Inisialisasi database khusus komputer pengguna.
+  const { initializeDatabase } = require("./database.cjs");
 
-  const checkServer = async () => {
-    attempts++;
+  const databasePath = path.join(
+    app.getPath("userData"),
+    "data.db"
+  );
 
-    try {
-      const response = await fetch(APP_URL);
+  const migrationsPath = path.join(
+    process.resourcesPath,
+    "prisma",
+    "migrations-sqlite"
+  );
 
-      if (response.ok || response.status < 500) {
-        resolve();
-        return;
-      }
-    } catch {
-      // Server belum siap, coba lagi.
+  initializeDatabase(databasePath, migrationsPath);
+
+  // Lokasi Next.js standalone.
+  const standalonePath = path.join(
+    process.resourcesPath,
+    "standalone"
+  );
+
+  const serverPath = path.join(
+    standalonePath,
+    "server.js"
+  );
+
+  const databaseUrl = `file:${databasePath.replace(/\\/g, "/")}`;
+
+  nextServer = spawn(
+    process.execPath,
+    [serverPath],
+    {
+      cwd: standalonePath,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
+        NODE_ENV: "production",
+        DATABASE_URL: databaseUrl,
+        HOSTNAME: HOST,
+        PORT: String(PORT),
+        NEXT_TELEMETRY_DISABLED: "1",
+      },
+      stdio: "inherit",
+      windowsHide: true,
     }
+  );
 
-    if (attempts >= maxAttempts) {
-      reject(new Error("Next.js tidak berhasil dijalankan dalam 60 detik."));
-      return;
+  nextServer.once("error", (error) => {
+    console.error("Gagal menjalankan Next.js:", error);
+  });
+
+  nextServer.once("exit", (code) => {
+    if (code !== 0 && code !== null) {
+      console.error(`Next.js berhenti dengan kode: ${code}`);
     }
+  });
 
-    setTimeout(checkServer, 1000);
-  };
-
-  checkServer();
+  await new Promise((resolve, reject) => {
+    waitForNextServer(resolve, reject);
+  });
 }
 
 async function createWindow() {
@@ -104,6 +175,8 @@ app.whenReady().then(async () => {
   try {
     if (isDev) {
       await startNextServer();
+    } else {
+      await startProductionServer();
     }
 
     await createWindow();

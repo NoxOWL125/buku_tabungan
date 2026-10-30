@@ -1,22 +1,14 @@
-
-import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "../generated/prisma/client";
 
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error("DATABASE_URL belum diatur di file .env");
+  throw new Error("DATABASE_URL belum diatur.");
 }
 
-const dbUrl = new URL(databaseUrl);
-
-const adapter = new PrismaMariaDb({
-  host: dbUrl.hostname,
-  port: Number(dbUrl.port || 3306),
-  user: decodeURIComponent(dbUrl.username),
-  password: decodeURIComponent(dbUrl.password),
-  database: dbUrl.pathname.slice(1),
-  connectionLimit: 5,
+const adapter = new PrismaBetterSqlite3({
+  url: databaseUrl,
 });
 
 const globalForPrisma = globalThis as unknown as {

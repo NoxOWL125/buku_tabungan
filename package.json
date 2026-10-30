@@ -9,12 +9,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "desktop:dev": "electron ."
+    "desktop:dev": "electron .",
+    "desktop:pack": "electron-builder --win nsis"
   },
   "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.10.1",
     "@prisma/adapter-mariadb": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "12.11.1",
     "dotenv": "^18.0.9",
     "jspdf": "^4.2.1",
     "next": "16.4.3",
@@ -23,16 +26,77 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
     "@tailwindcss/turbopack": "^4",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "electron": "^45.1.0",
+    "electron": "43.8.4",
     "electron-builder": "^26.18.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "prisma": "^7.10.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
+  },
+  "build": {
+    "appId": "com.noxowl.bukutabungandigital",
+    "productName": "Buku Tabungan Digital",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop-build/standalone",
+        "to": "standalone",
+        "filter": [
+          "**/*",
+          "!dev.db",
+          "!test-sqlite.cjs",
+          "!.env"
+        ]
+      },
+      {
+        "from": "desktop-build/standalone/node_modules",
+        "to": "standalone/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "prisma/migrations-sqlite",
+        "to": "prisma/migrations-sqlite",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Buku Tabungan Digital"
+    }
   }
 }

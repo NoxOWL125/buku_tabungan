@@ -41,3 +41,14 @@ yarn-error.log*
 next-env.d.ts
 
 /generated/prisma
+
+# SQLite database
+dev.db
+dev.db-journal
+dev.db-shm
+dev.db-wal
+
+# Build desktop
+release/
+desktop-build/
+desktop-test/
